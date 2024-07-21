@@ -5,7 +5,9 @@ import backend/router
 import dot_env
 import gleam/erlang/process
 import gleam/function
+import gleam/io
 import gleam/otp/supervisor
+import gleam/result
 import mist
 import periodic
 import setup
@@ -26,26 +28,35 @@ pub fn main() {
   logger.set_level(cnf.level)
   setup.radiate()
 
-  let assert Ok(subject) = type_search.init(ctx.db)
+  // let  Ok(subject) = type_search.init(ctx.db)     |> result.map_error(fn(x) {
+  //     io.println("TOP CAUGHT")
+  //     io.debug(x)
+  //
+  //   })
+
   // let assert Ok(_) =
   //   supervisor.start(fn(children) {
   //     use _ <- function.tap(children)
   //     supervisor.add(children, { supervisor.worker(fn(_) { Ok(subject) }) })
   //   })
 
-  let ctx = ctx |> config.add_type_search_subject(subject)
+  // let ctx = ctx |> config.add_type_search_subject(subject)
 
-  let assert Ok(_) =
+  let _ =
     router.handle_request(_, ctx)
     |> wisp.mist_handler(secret_key_base)
     |> mist.new()
     |> mist.port(cnf.port)
     |> mist.start_http()
+    |> result.map_error(fn(x) {
+      io.println("TOP CAUGHT")
+      io.debug(x)
+    })
 
-  let assert Ok(_) =
+  let _ =
     supervisor.start(fn(periodic_children) {
       use _ <- function.tap(periodic_children)
-      let assert Ok(_) =
+      let _ =
         supervisor.start(fn(children) {
           add_periodic_worker(periodic_children, waiting: 6 * 1000, do: fn() {
             hex.sync_new_gleam_releases(ctx, children)
@@ -57,6 +68,14 @@ pub fn main() {
             popularity.compute_popularity(ctx)
           })
         })
+        |> result.map_error(fn(x) {
+          io.println("INNER CAUGHT")
+          io.debug(x)
+        })
+    })
+    |> result.map_error(fn(x) {
+      io.println("CAUGHT")
+      io.debug(x)
     })
 
   process.sleep_forever()

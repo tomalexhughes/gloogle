@@ -2,7 +2,7 @@ import api/hex as api
 import api/hex_repo
 import api/signatures
 import backend/config.{type Context}
-import backend/data/hex_read.{type HexRead}
+import backend/data/hex_read.{type HexRead, HexRead}
 import backend/error.{type Error}
 import backend/gleam/context
 import backend/gleam/type_search/state as type_search
@@ -41,6 +41,7 @@ pub fn sync_new_gleam_releases(
 ) -> Result(HexRead, Error) {
   wisp.log_info("Syncing new releases from Hex")
   use limit <- result.try(queries.get_last_hex_date(ctx.db))
+  // fails with the below running
   use latest <- result.try(sync_packages(
     State(
       page: 1,
@@ -53,10 +54,11 @@ pub fn sync_new_gleam_releases(
     ),
     children,
   ))
-  let latest = queries.upsert_most_recent_hex_timestamp(ctx.db, latest)
+  // let latest = queries.upsert_most_recent_hex_timestamp(ctx.db, latest)
+  let latest = []
   wisp.log_info("")
   wisp.log_info("Up to date!")
-  latest
+  Ok(HexRead(1, birl.now()))
 }
 
 fn keep_newest_date(package: hexpm.Package, state: State) {
@@ -82,16 +84,18 @@ fn sync_packages(
   use all_packages <- result.try(api.get_api_packages_page(page, api_key))
   let state = State(..state, newest: first_timestamp(all_packages, state))
   let new_packages = take_fresh_packages(all_packages, state.limit)
+  // TODO: Test with below enabled
   use state <- result.try(list.try_fold(
     new_packages,
     state,
     do_sync_package(Some(children), force: False),
   ))
-  case list.length(all_packages) == list.length(new_packages) {
-    _ if all_packages == [] -> Ok(state.newest)
-    False -> Ok(state.newest)
-    True -> sync_packages(State(..state, page: state.page + 1), children)
-  }
+  Ok(birl.now())
+  // case list.length(all_packages) == list.length(new_packages) {
+  //   _ if all_packages == [] -> Ok(state.newest)
+  //   False -> Ok(state.newest)
+  //   True -> sync_packages(State(..state, page: state.page + 1), children)
+  // }
 }
 
 fn do_sync_package(
@@ -101,17 +105,18 @@ fn do_sync_package(
   fn(state: State, package: hexpm.Package) -> Result(State, Error) {
     let secret = state.hex_api_key
     use releases <- result.try(lookup_gleam_releases(package, secret: secret))
+    // DOES IT WORK WITH THIS?
     case releases {
       [] -> Ok(log_if_needed(state, package.updated_at))
       _ -> {
-        use _ <- result.map(insert_package_and_releases(
-          package,
-          releases,
-          state,
-          children,
-          force_old_release_update,
-        ))
-        State(..state, last_logged: birl.now())
+        // use _ <- result.map(insert_package_and_releases(
+        //   package,
+        //   releases,
+        //   state,
+        //   children,
+        //   force_old_release_update,
+        // ))
+        Ok(State(..state, last_logged: birl.now()))
       }
     }
   }
